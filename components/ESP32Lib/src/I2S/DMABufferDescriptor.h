@@ -19,10 +19,10 @@ class DMABufferDescriptor : protected lldesc_t
   public:
 	static void *allocateBuffer(int bytes, bool clear = true, unsigned long clearValue = 0)
 	{
-		bytes = (bytes + 3) & 0xfffffffc;
+		bytes = (bytes + 3) & 0xfffffffc;   //This line rounds up the bytes value to the nearest multiple of 4. This rounding down is done because display systems often work in multiples of four pixels (16 bits) due to hardware constraints or alignment requirements
 		void *b = heap_caps_malloc(bytes, MALLOC_CAP_DMA);
 		if (!b)
-			DEBUG_PRINTLN("Failed to alloc dma buffer");
+			ERROR("Failed to alloc dma buffer");
 		if (clear)
 			for (int i = 0; i < bytes / 4; i++)
 				((unsigned long *)b)[i] = clearValue;
@@ -32,13 +32,15 @@ class DMABufferDescriptor : protected lldesc_t
 	static void **allocateDMABufferArray(int count, int bytes, bool clear = true, unsigned long clearValue = 0)
 	{
 		void **arr = (void **)malloc(count * sizeof(void *));
+		ESP_LOGI("Allocate_Buffer_Array", "Count: %d", count);
+		ESP_LOGI("Allocate_Buffer_Array", "bytes for buffer: %d", bytes);
 		if(!arr)
-			ERROR("Not enough DMA memory");
+			ERROR("Not enough DMA memory1");
 		for (int i = 0; i < count; i++)
 		{
 			arr[i] = DMABufferDescriptor::allocateBuffer(bytes, true, clearValue);
 			if(!arr[i])
-				ERROR("Not enough DMA memory");
+				ERROR("Not enough DMA memory2");
 		}
 		return arr;
 	}
@@ -70,7 +72,7 @@ class DMABufferDescriptor : protected lldesc_t
 
 	static DMABufferDescriptor *allocateDescriptors(int count)
 	{
-		DMABufferDescriptor *b = (DMABufferDescriptor *)heap_caps_malloc(sizeof(DMABufferDescriptor) * count, MALLOC_CAP_DMA);
+		DMABufferDescriptor *b = (DMABufferDescriptor *)heap_caps_malloc(sizeof(DMABufferDescriptor) * count, MALLOC_CAP_8BIT);
 		if (!b)
 			DEBUG_PRINTLN("Failed to alloc DMABufferDescriptors");
 		for (int i = 0; i < count; i++)
@@ -81,7 +83,7 @@ class DMABufferDescriptor : protected lldesc_t
 	static DMABufferDescriptor *allocateDescriptor(int bytes, bool allocBuffer = true, bool clear = true, unsigned long clearValue = 0)
 	{
 		bytes = (bytes + 3) & 0xfffffffc;
-		DMABufferDescriptor *b = (DMABufferDescriptor *)heap_caps_malloc(sizeof(DMABufferDescriptor), MALLOC_CAP_DMA);
+		DMABufferDescriptor *b = (DMABufferDescriptor *)heap_caps_malloc(sizeof(DMABufferDescriptor), MALLOC_CAP_8BIT);
 		if (!b)
 			DEBUG_PRINTLN("Failed to alloc DMABufferDescriptor");
 		b->init();

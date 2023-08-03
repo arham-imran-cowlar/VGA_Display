@@ -30,6 +30,7 @@ set(includedirs
 )
 
 set(srcs ${VGA_SRCS} ${LED_SRCS} ${I2S_SRCS} ${COMPOSITE_SRCS})
-set(requires soc driver freertos esp_rom log spi_flash heap esp_common)
+set(requires soc driver freertos esp_rom log spi_flash heap esp_common esp_hw_support)
 
 idf_component_register(INCLUDE_DIRS ${includedirs} SRCS ${srcs} REQUIRES ${requires})
+target_include_directories(${COMPONENT_LIB} PRIVATE soc/esp32s2)

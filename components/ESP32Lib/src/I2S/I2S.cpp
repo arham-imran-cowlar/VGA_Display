@@ -11,20 +11,26 @@
 */
 #include "I2S.h"
 #include "../Tools/Log.h"
-#include <soc/rtc.h>
+#include <esp32s2/rtc.h>
 #include <driver/rtc_io.h>
 #include "io_mux_reg.h"
 #include "soc/gpio_periph.h"
+#include "soc/i2s_struct.h"
 #include "esp32s2/rom/gpio.h"
+#include "include/soc/periph_defs.h"
+#include "include/soc/i2s_struct.h"
+#include "hal/clk_tree_ll.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
-i2s_dev_t *i2sDevices[] = {&I2S0, &I2S1};
+i2s_dev_t *i2sDevices = &I2S0;
 
 I2S::I2S(const int i2sIndex)
 {
-	const periph_module_t deviceModule[] = {PERIPH_I2S0_MODULE, PERIPH_I2S1_MODULE};
+	const periph_module_t deviceModule[] = {PERIPH_I2S0_MODULE};
 	this->i2sIndex = i2sIndex;
 	//enable I2S peripheral
-	periph_module_enable(deviceModule[i2sIndex]);
+	periph_module_enable(PERIPH_I2S0_MODULE);
 	interruptHandle = 0;
 	dmaBufferDescriptorCount = 0;
 	dmaBufferDescriptorActive = 0;
@@ -54,7 +60,7 @@ void IRAM_ATTR I2S::interruptStatic(void *arg)
 
 void I2S::reset()
 {
-	volatile i2s_dev_t &i2s = *i2sDevices[i2sIndex];
+	volatile i2s_dev_t &i2s = *i2sDevices;
 	const unsigned long lc_conf_reset_flags = I2S_IN_RST_M | I2S_OUT_RST_M | I2S_AHBM_RST_M | I2S_AHBM_FIFO_RST_M;
 	i2s.lc_conf.val = i2s.lc_conf.val | lc_conf_reset_flags; //i2s.lc_conf.val |= lc_conf_reset_flags;
 	i2s.lc_conf.val = i2s.lc_conf.val & ~lc_conf_reset_flags; //i2s.lc_conf.val &= ~lc_conf_reset_flags;
@@ -62,13 +68,13 @@ void I2S::reset()
 	const uint32_t conf_reset_flags = I2S_RX_RESET_M | I2S_RX_FIFO_RESET_M | I2S_TX_RESET_M | I2S_TX_FIFO_RESET_M;
 	i2s.conf.val = i2s.conf.val | conf_reset_flags; //i2s.conf.val |= conf_reset_flags;
 	i2s.conf.val = i2s.conf.val & ~conf_reset_flags; //i2s.conf.val &= ~conf_reset_flags;
-	while (i2s.state.rx_fifo_reset_back)
-		;
+	//while (i2s.state.rx_fifo_reset_back)
+	//	;
 }
 
 void I2S::i2sStop()
 {
-	volatile i2s_dev_t &i2s = *i2sDevices[i2sIndex];
+	volatile i2s_dev_t &i2s = *i2sDevices;
 	esp_intr_disable(interruptHandle);
 	reset();
 	i2s.conf.rx_start = 0;
@@ -77,7 +83,8 @@ void I2S::i2sStop()
 
 void I2S::startTX()
 {
-	volatile i2s_dev_t &i2s = *i2sDevices[i2sIndex];
+	volatile i2s_dev_t &i2s = *i2sDevices;
+	ESP_LOGI("start_TX", "I2S TX");
 	DEBUG_PRINTLN("I2S TX");
 	esp_intr_disable(interruptHandle);
 	reset();
@@ -99,7 +106,7 @@ void I2S::startTX()
 
 void I2S::startRX()
 {
-	volatile i2s_dev_t &i2s = *i2sDevices[i2sIndex];
+	volatile i2s_dev_t &i2s = *i2sDevices;
 	DEBUG_PRINTLN("I2S RX");
 	esp_intr_disable(interruptHandle);
 	reset();
@@ -116,7 +123,7 @@ void I2S::startRX()
 
 void I2S::resetDMA()
 {
-	volatile i2s_dev_t &i2s = *i2sDevices[i2sIndex];
+	volatile i2s_dev_t &i2s = *i2sDevices;
 	i2s.lc_conf.in_rst = 1;
 	i2s.lc_conf.in_rst = 0;
 	i2s.lc_conf.out_rst = 1;
@@ -125,7 +132,7 @@ void I2S::resetDMA()
 
 void I2S::resetFIFO()
 {
-	volatile i2s_dev_t &i2s = *i2sDevices[i2sIndex];
+	volatile i2s_dev_t &i2s = *i2sDevices;
 	i2s.conf.rx_fifo_reset = 1;
 	i2s.conf.rx_fifo_reset = 0;
 	i2s.conf.tx_fifo_reset = 1;
@@ -159,12 +166,12 @@ void I2S::getClockSetting(long *sampleRate, int *n, int *a, int *b, int *div)
 
 bool I2S::initParallelInputMode(const int *pinMap, long sampleRate, const int bitCount, int wordSelect, int baseClock)
 {
-	volatile i2s_dev_t &i2s = *i2sDevices[i2sIndex];
+	volatile i2s_dev_t &i2s = *i2sDevices;
 	//route peripherals
-	const int deviceBaseIndex[] = {I2S0I_DATA_IN0_IDX, I2S1I_DATA_IN0_IDX};
-	const int deviceClockIndex[] = {I2S0I_BCK_IN_IDX, I2S1I_BCK_IN_IDX};
-	const int deviceWordSelectIndex[] = {I2S0I_WS_IN_IDX, I2S1I_WS_IN_IDX};
-	const periph_module_t deviceModule[] = {PERIPH_I2S0_MODULE, PERIPH_I2S1_MODULE};
+	const int deviceBaseIndex[] = {I2S0I_DATA_IN0_IDX};
+	const int deviceClockIndex[] = {I2S0I_BCK_IN_IDX};
+	const int deviceWordSelectIndex[] = {I2S0I_WS_IN_IDX};
+	const periph_module_t deviceModule[] = {PERIPH_I2S0_MODULE};
 	//works only since indices of the pads are sequential
 	for (int i = 0; i < bitCount; i++)
 		if (pinMap[i] > -1)
@@ -202,7 +209,7 @@ bool I2S::initParallelInputMode(const int *pinMap, long sampleRate, const int bi
 
 	//maximum rate
 	i2s.clkm_conf.val = 0;
-	i2s.clkm_conf.clka_en = 0;
+	i2s.clkm_conf.clk_en = 0;
 	i2s.clkm_conf.clkm_div_num = 6; //3//80000000L / sampleRate;
 	i2s.clkm_conf.clkm_div_a = 6;   // 0;
 	i2s.clkm_conf.clkm_div_b = 1;   // 0;
@@ -233,7 +240,7 @@ bool I2S::initParallelInputMode(const int *pinMap, long sampleRate, const int bi
 	i2s.conf.rx_short_sync = 0;
 
 	//allocate disabled i2s interrupt
-	const int interruptSource[] = {ETS_I2S0_INTR_SOURCE, ETS_I2S1_INTR_SOURCE};
+	const int interruptSource[] = {ETS_I2S0_INTR_SOURCE};
 	if(useInterrupt())
 		esp_intr_alloc(interruptSource[i2sIndex], ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_LEVEL3 | ESP_INTR_FLAG_IRAM, &interruptStatic, this, &interruptHandle);
 	return true;
@@ -241,22 +248,27 @@ bool I2S::initParallelInputMode(const int *pinMap, long sampleRate, const int bi
 
 bool I2S::initParallelOutputMode(const int *pinMap, long sampleRate, const int bitCount, int wordSelect, int baseClock)
 {
-	volatile i2s_dev_t &i2s = *i2sDevices[i2sIndex];
+	volatile i2s_dev_t &i2s = *i2sDevices;
+	ESP_LOGI("I2S_initParallelOutputMode", "After\n                     volatile i2s_dev_t &i2s = *i2sDevices[i2sIndex];\n in I2S.cpp");
 	//route peripherals
 	//in parallel mode only upper 16 bits are interesting in this case
-	const int deviceBaseIndex[] = {I2S0O_DATA_OUT0_IDX, I2S1O_DATA_OUT0_IDX};
-	const int deviceClockIndex[] = {I2S0O_BCK_OUT_IDX, I2S1O_BCK_OUT_IDX};
-	const int deviceWordSelectIndex[] = {I2S0O_WS_OUT_IDX, I2S1O_WS_OUT_IDX};
-	const periph_module_t deviceModule[] = {PERIPH_I2S0_MODULE, PERIPH_I2S1_MODULE};
+	const int deviceBaseIndex[] = {I2S0O_DATA_OUT0_IDX};
+	const int deviceClockIndex[] = {I2S0O_BCK_OUT_IDX};
+	const int deviceWordSelectIndex[] = {I2S0O_WS_OUT_IDX};
+	const periph_module_t deviceModule[] = {PERIPH_I2S0_MODULE};
+	ESP_LOGI("I2S_initParallelOutputMode", "After all setup variables in I2S.cpp");
 	//works only since indices of the pads are sequential
 	for (int i = 0; i < bitCount; i++)
+	{
 		if (pinMap[i] > -1)
 		{
+			ESP_LOGI("I2S_initParallelOutputMode", "In for loop true1 cond iteration %d, max iterations: %d in I2S.cpp", i, bitCount-1);
 			PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[pinMap[i]], PIN_FUNC_GPIO);
 			gpio_set_direction((gpio_num_t)pinMap[i], (gpio_mode_t)GPIO_MODE_DEF_OUTPUT);
 			//rtc_gpio_set_drive_capability((gpio_num_t)pinMap[i], (gpio_drive_cap_t)GPIO_DRIVE_CAP_3 );
 			if(i2sIndex == 1)
 			{
+				ESP_LOGI("I2S_initParallelOutputMode", "In i2sIndex==1 iteration %d, max iterations: %d in I2S.cpp", i, bitCount-1);
 				if(bitCount == 16)
 					gpio_matrix_out(pinMap[i], deviceBaseIndex[i2sIndex] + i + 8, false, false);
 				else
@@ -264,11 +276,14 @@ bool I2S::initParallelOutputMode(const int *pinMap, long sampleRate, const int b
 			}
 			else
 			{
+				ESP_LOGI("I2S_initParallelOutputMode", "In for loop false1 cond iteration %d, max iterations: %d in I2S.cpp", i, bitCount-1);
 				//there is something odd going on here in the two different I2S
 				//the configuration seems to differ. Use i2s1 for high frequencies.
 				gpio_matrix_out(pinMap[i], deviceBaseIndex[i2sIndex] + i + 24 - bitCount, false, false);
 			}
 		}
+	}
+	ESP_LOGI("I2S_initParallelOutputMode", "After for loop in I2S.cpp");
 	if (baseClock > -1)
 		gpio_matrix_out(baseClock, deviceClockIndex[i2sIndex], false, false);
 	if (wordSelect > -1)
@@ -276,7 +291,7 @@ bool I2S::initParallelOutputMode(const int *pinMap, long sampleRate, const int b
 
 		//enable I2S peripheral
 	periph_module_enable(deviceModule[i2sIndex]);
-
+	
 	//reset i2s
 	i2s.conf.tx_reset = 1;
 	i2s.conf.tx_reset = 0;
@@ -289,6 +304,18 @@ bool I2S::initParallelOutputMode(const int *pinMap, long sampleRate, const int b
 	//parallel mode
 	i2s.conf2.val = 0;
 	i2s.conf2.lcd_en = 1;
+
+	//Self bit manipuation from the technical reference manual
+	// i2s.conf.tx_slave_mod = 0;
+	// i2s.conf.tx_dma_equal = 1;
+	// i2s.conf.tx_right_first = 0;
+	// i2s.conf2.lcd_tx_wrx2_en = 0;
+	// i2s.conf2.lcd_tx_sdx2_en = 0;
+	// i2s.conf_chan.tx_chan_mod = 0;
+	// i2s.sample_rate_conf.tx_bits_mod = bitCount;
+	// i2s.conf.rx_big_endian = 0;                      // might cause opposite order of bytes being sent
+	// i2s.fifo_conf.dscr_en = 1;
+	
 	//from technical datasheet figure 64
 	i2s.conf2.lcd_tx_wrx2_en = 1;
 	i2s.conf2.lcd_tx_sdx2_en = 0;
@@ -321,10 +348,10 @@ bool I2S::initParallelOutputMode(const int *pinMap, long sampleRate, const int b
 			sdm = long((double(freq) / (20000000. / (odir + 2))) * 0x10000) - 0x40000;
 			sdmn = long((double(freq) / (20000000. / (odir + 2 + 1))) * 0x10000) - 0x40000;
 		}while(sdm < 0x8c0ecL && odir < 31 && sdmn < 0xA1fff); //0xA7fffL doesn't work on all mcus 
-		//DEBUG_PRINTLN(sdm & 255);
-		//DEBUG_PRINTLN((sdm >> 8) & 255);
-		//DEBUG_PRINTLN(sdm >> 16);
-		//DEBUG_PRINTLN(odir);
+		DEBUG_PRINT_NUM_LN(sdm & 255);
+		DEBUG_PRINT_NUM_LN((sdm >> 8) & 255);
+		DEBUG_PRINT_NUM_LN(sdm >> 16);
+		DEBUG_PRINT_NUM_LN(odir);
 		//sdm = 0xA1fff;
 		//odir = 0;
 		if(sdm > 0xA1fff) sdm = 0xA1fff;
@@ -332,7 +359,7 @@ bool I2S::initParallelOutputMode(const int *pinMap, long sampleRate, const int b
 	}
 
 	i2s.clkm_conf.val = 0;
-	i2s.clkm_conf.clka_en = sampleRate > 0 ? 1 : 0;
+	i2s.clkm_conf.clk_en = sampleRate > 0 ? 1 : 0;
 	i2s.clkm_conf.clkm_div_num = clockN;
 	i2s.clkm_conf.clkm_div_a = clockA;
 	i2s.clkm_conf.clkm_div_b = clockB;
@@ -344,15 +371,25 @@ bool I2S::initParallelOutputMode(const int *pinMap, long sampleRate, const int b
 	i2s.fifo_conf.tx_data_num = 32; //fifo length
 	i2s.fifo_conf.dscr_en = 1;		//fifo will use dma
 
+/*self set registers*/
+	i2s.conf.tx_slave_mod = 0;
+	i2s.conf.tx_dma_equal = 1;
+	i2s.conf.tx_right_first = 0;
+	i2s.conf_chan.tx_chan_mod = 0;
+	i2s.sample_rate_conf.tx_bits_mod = bitCount;
+	i2s.conf.rx_big_endian = 0;                      // might cause opposite order of bytes being sent
+	//i2s.fifo_conf.dscr_en = 1;
+/*end of self set registers*/
+
 	i2s.conf1.val = 0;
 	i2s.conf1.tx_stop_en = 0;
 	i2s.conf1.tx_pcm_bypass = 1;
 
 	i2s.conf_chan.val = 0;
-	i2s.conf_chan.tx_chan_mod = 1;
+	//i2s.conf_chan.tx_chan_mod = 1;
 
 	//high or low (stereo word order)
-	i2s.conf.tx_right_first = 1;
+	//i2s.conf.tx_right_first = 1;
 
 	i2s.timing.val = 0;
 
@@ -363,7 +400,7 @@ bool I2S::initParallelOutputMode(const int *pinMap, long sampleRate, const int b
 	i2s.conf.tx_short_sync = 0;
 
 	//allocate disabled i2s interrupt
-	const int interruptSource[] = {ETS_I2S0_INTR_SOURCE, ETS_I2S1_INTR_SOURCE};
+	const int interruptSource[] = {ETS_I2S0_INTR_SOURCE};
 	if(useInterrupt())
 		esp_intr_alloc(interruptSource[i2sIndex], ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_LEVEL3 | ESP_INTR_FLAG_IRAM, &interruptStatic, this, &interruptHandle);
 	return true;
@@ -403,7 +440,7 @@ void I2S::setAPLLClock(long sampleRate, int bitCount)
 
 void I2S::setClock(long sampleRate, int bitCount, bool useAPLL)
 {
-	volatile i2s_dev_t &i2s = *i2sDevices[i2sIndex];
+	volatile i2s_dev_t &i2s = *i2sDevices;
 	int factor = 1;
 	if(bitCount > 8)
 		factor = 2;
@@ -416,7 +453,7 @@ void I2S::setClock(long sampleRate, int bitCount, bool useAPLL)
 	if(useAPLL)
 	{
 		setAPLLClock(sampleRate, bitCount);
-		i2s.clkm_conf.clka_en = 1;
+		i2s.clkm_conf.clk_en = 1;
 		i2s.clkm_conf.clkm_div_num = 2; //clockN;
 		i2s.clkm_conf.clkm_div_a = 1;   //clockA;
 		i2s.clkm_conf.clkm_div_b = 0;   //clockB;
@@ -433,12 +470,12 @@ void I2S::setClock(long sampleRate, int bitCount, bool useAPLL)
 
 bool I2S::initSerialOutputMode(int dataPin, const int bitCount, int wordSelect, int baseClock)
 {
-	volatile i2s_dev_t &i2s = *i2sDevices[i2sIndex];
+	volatile i2s_dev_t &i2s = *i2sDevices;
 	//route peripherals
 	//in parallel mode only upper 16 bits are interesting in this case
-	const int deviceBaseIndex[] = {I2S0O_DATA_OUT0_IDX, I2S1O_DATA_OUT0_IDX};
-	const int deviceClockIndex[] = {I2S0O_BCK_OUT_IDX, I2S1O_BCK_OUT_IDX};
-	const int deviceWordSelectIndex[] = {I2S0O_WS_OUT_IDX, I2S1O_WS_OUT_IDX};
+	const int deviceBaseIndex[] = {I2S0O_DATA_OUT0_IDX};
+	const int deviceClockIndex[] = {I2S0O_BCK_OUT_IDX};
+	const int deviceWordSelectIndex[] = {I2S0O_WS_OUT_IDX};
 	//const periph_module_t deviceModule[] = {PERIPH_I2S0_MODULE, PERIPH_I2S1_MODULE};
 	
 	//works only since indices of the pads are sequential
@@ -491,7 +528,7 @@ bool I2S::initSerialOutputMode(int dataPin, const int bitCount, int wordSelect, 
 
 
 	//allocate disabled i2s interrupt
-	const int interruptSource[] = {ETS_I2S0_INTR_SOURCE, ETS_I2S1_INTR_SOURCE};
+	const int interruptSource[] = {ETS_I2S0_INTR_SOURCE};
 	if(useInterrupt())
 		esp_intr_alloc(interruptSource[i2sIndex], ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_LEVEL3 | ESP_INTR_FLAG_IRAM, &interruptStatic, this, &interruptHandle);
 	return true;

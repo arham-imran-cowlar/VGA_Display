@@ -64,15 +64,21 @@ bool VGA::init(const Mode &mode, const int *pinMap, const int bitCount, const in
 	int xres = mode.hRes;
 	int yres = mode.vRes / mode.vDiv;
 	initSyncBits();
+	ESP_LOGI("VGA_init", "After initSyncBits() in VGA.cpp");
 	propagateResolution(xres, yres);
+	ESP_LOGI("VGA_init", "After propagateResolution() in VGA.cpp");
 	this->vsyncPin = vsyncPin;
 	this->hsyncPin = hsyncPin;
 	totalLines = mode.linesPerField();
+	ESP_LOGI("VGA_init", "After linesPerField() in VGA.cpp");
 	allocateLineBuffers();
+	ESP_LOGI("VGA_init", "After allocateLineBuffers() in VGA.cpp");
 	currentLine = 0;
 	vSyncPassed = false;
 	initParallelOutputMode(pinMap, mode.pixelClock, bitCount, clockPin);
+	ESP_LOGI("VGA_init", "After initParallelOutputMode() in VGA.cpp");
 	startTX();
+	ESP_LOGI("VGA_init", "After startTX() in VGA.cpp");
 	return true;
 }
 
@@ -90,6 +96,7 @@ void VGA::allocateLineBuffers()
 void VGA::allocateLineBuffers(const int lines)
 {
 	dmaBufferDescriptorCount = lines;
+	ESP_LOGI("Allocate_Line_Buffers", "lines: %d", lines);
 	dmaBufferDescriptors = DMABufferDescriptor::allocateDescriptors(dmaBufferDescriptorCount);
 	int bytes = (mode.hFront + mode.hSync + mode.hBack + mode.hRes) * bytesPerSample();
 	for (int i = 0; i < dmaBufferDescriptorCount; i++)
@@ -105,6 +112,7 @@ void VGA::allocateLineBuffers(const int lines)
 void VGA::allocateLineBuffers(void **frameBuffer)
 {
 	dmaBufferDescriptorCount = totalLines * 2;
+	ESP_LOGI("Allocate_Line_Buffers", "DMA Buffer Descriptors Count: %d", dmaBufferDescriptorCount);
 	int inactiveSamples = (mode.hFront + mode.hSync + mode.hBack + 3) & 0xfffffffc;
 	vSyncInactiveBuffer = DMABufferDescriptor::allocateBuffer(inactiveSamples * bytesPerSample(), true);
 	vSyncActiveBuffer = DMABufferDescriptor::allocateBuffer(mode.hRes * bytesPerSample(), true);

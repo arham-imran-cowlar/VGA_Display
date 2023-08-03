@@ -16,8 +16,8 @@
 class VGA3Bit : public VGA, public GraphicsR1G1B1A1X2S2Swapped
 {
   public:
-	VGA3Bit() //8 bit based modes only work with I2S1
-		: VGA(1)
+	VGA3Bit() //8 bit based modes only work with I2S1 but since we have esp32-s2, it only has I2S0
+		: VGA(0)
 	{
 	}
 

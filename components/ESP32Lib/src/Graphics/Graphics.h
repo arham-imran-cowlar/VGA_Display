@@ -40,17 +40,22 @@ class Graphics: public ImageDrawer
 	virtual Color** allocateFrameBuffer() = 0;
 	virtual Color** allocateFrameBuffer(int xres, int yres, Color value)
 	{
-		Color** frame = (Color **)malloc(yres * sizeof(Color *));
+		Color** frame = (Color **)heap_caps_malloc(yres * sizeof(Color *), MALLOC_CAP_SPIRAM );
 		if(!frame)
-			ERROR("Not enough memory for frame buffer");				
+		{
+			ERROR("Not enough memory for frame buffer");
+		}else{
+			ESP_LOGI("allocateFrameBuffer", "Allocated frame only");				
+		}
 		for (int y = 0; y < yres; y++)
 		{
-			frame[y] = (Color *)malloc(xres * sizeof(Color));
+			frame[y] = (Color *)heap_caps_malloc(xres * sizeof(Color), MALLOC_CAP_SPIRAM );
 			if(!frame[y])
 				ERROR("Not enough memory for frame buffer");
 			for (int x = 0; x < xres; x++)
 				frame[y][x] = value;
 		}
+		ESP_LOGI("allocateFrameBuffer", "Allocated frame and assigned values");
 		return frame;
 	}
 	virtual Color RGBA(int r, int g, int b, int a = 255) const = 0;
@@ -106,7 +111,10 @@ class Graphics: public ImageDrawer
 		if(yres <= 0 || xres <= 0)
 			return false;
 		for(int i = 0; i < frameBufferCount; i++)
+		{
 			frameBuffers[i] = allocateFrameBuffer();
+			ESP_LOGI("FRAME_BUFFERS", "allocated %d buffers", i+1);
+		}
 		currentFrameBuffer = 0;
 		show();
 		return true;

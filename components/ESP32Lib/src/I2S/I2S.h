@@ -13,10 +13,10 @@
 
 #include "esp_heap_caps.h"
 #include "soc/soc.h"
-#include "soc/gpio_sig_map.h"
-#include "soc/i2s_reg.h"
-#include "soc/i2s_struct.h"
-#include "soc/io_mux_reg.h"
+#include "include/soc/gpio_sig_map.h"
+#include "include/soc/i2s_reg.h"
+#include "include/soc/i2s_struct.h"
+#include "include/soc/io_mux_reg.h"
 #include "driver/gpio.h"
 #include "driver/periph_ctrl.h"
 #include "rom/lldesc.h"
@@ -25,7 +25,7 @@
 class I2S
 {
   public:
-	int i2sIndex;
+	int i2sIndex = 0;
 	intr_handle_t interruptHandle;
 	int dmaBufferDescriptorCount;
 	int dmaBufferDescriptorActive;
